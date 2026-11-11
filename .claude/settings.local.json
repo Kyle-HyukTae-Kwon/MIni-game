@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell($v='C:\\\\Users\\\\gurxo\\\\AppData\\\\Local\\\\Packages\\\\Microsoft.ScreenSketch_8wekyb3d8bbwe\\\\TempState\\\\Recordings\\\\20261111-1027-52.9014383.mp4'; \"exists=$\\(Test-Path $v\\)\"; if\\(Test-Path $v\\){ \"size=$\\(\\(Get-Item $v\\).Length\\)\" }; foreach\\($c in 'ffmpeg','ffprobe','python','py','node'\\){ $g=Get-Command $c -ErrorAction SilentlyContinue; if\\($g\\){ \"$c -> $\\($g.Source\\)\" } else { \"$c -> none\" } })",
+      "PowerShell(python -c \"import importlib.util as u; print\\({m: bool\\(u.find_spec\\(m\\)\\) for m in ['cv2','imageio','imageio_ffmpeg','av','PIL','numpy','moviepy']}\\)\")",
+      "PowerShell(Copy-Item 'C:\\\\Users\\\\gurxo\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\321016b79a52de75\\\\50c1c942-585c-4a28-8dfa-95efe35138a4\\\\scratchpad\\\\video.html' \\(Join-Path \\(Get-Location\\) '_video_check.html'\\); \\(Get-Item '_video_check.html'\\).Length)",
+      "PowerShell(Copy-Item 'index.html' 'C:\\\\Users\\\\gurxo\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\321016b79a52de75\\\\50c1c942-585c-4a28-8dfa-95efe35138a4\\\\scratchpad\\\\game.html' -Force)",
+      "PowerShell(Remove-Item '.claude\\\\launch.json' -Confirm:$false; if\\(-not \\(Get-ChildItem '.claude' -Force\\)\\){ Remove-Item '.claude' -Confirm:$false }; $s='C:\\\\Users\\\\gurxo\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\321016b79a52de75\\\\50c1c942-585c-4a28-8dfa-95efe35138a4\\\\scratchpad'; Remove-Item \\(Join-Path $s 'ref.mp4'\\),\\(Join-Path $s 'video.html'\\),\\(Join-Path $s 'v.html'\\),\\(Join-Path $s 'game.html'\\) -Confirm:$false; Get-ChildItem -Force | Select-Object -ExpandProperty Name)"
+    ]
+  }
+}
