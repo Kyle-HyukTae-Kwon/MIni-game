@@ -98,6 +98,15 @@ button{font-family:inherit;color:inherit;cursor:pointer}
 .lb li .sc{font-family:var(--px);font-size:10px;color:var(--cyan)}
 .lb li.empty{color:#4b4380}
 .foot{margin-top:26px;text-align:center;color:var(--dim);font-size:12px}
+/* 광고 자리: 광고 코드가 없을 때는 점선 상자로 자리만 표시 */
+.ad-slot{position:relative;margin:0 auto 18px;max-width:728px;min-height:90px;display:flex;align-items:center;justify-content:center;
+  border:2px dashed #3a2f6e;border-radius:6px;background:rgba(10,4,32,.55);color:#6c62a0;font-size:12px;text-align:center;overflow:hidden}
+.ad-slot::before{content:"AD";position:absolute;top:5px;left:7px;font-family:var(--px);font-size:8px;color:#6c62a0}
+.ad-slot.filled{border:0;background:none}
+.ad-slot.filled::before{display:none}
+.ad-slot.off{display:none}
+.mbox .ad-slot{min-height:60px;margin:0 0 16px}
+@media (max-width:560px){ .ad-slot{min-height:100px;margin-bottom:14px} .mbox .ad-slot{min-height:56px} }
 
 /* ---------- game screen ---------- */
 .ghead{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
@@ -285,6 +294,7 @@ button{font-family:inherit;color:inherit;cursor:pointer}
       <button class="btn" id="muteBtn" aria-label="소리 켜기/끄기">SOUND ON</button>
     </div>
   </div>
+  <div class="ad-slot" id="adHome" role="complementary" aria-label="광고"></div>
   <div class="cabs" id="cabs"></div>
   <p class="foot">빠르고 정확하게 클리어할수록 높은 점수! 클리어하면 닉네임으로 기록을 등록할 수 있어요.</p>
 </section>
@@ -991,6 +1001,33 @@ GAMES.sichuan={
 /* =====================================================================
    UI : 화면 전환, 메인 랭킹, 결과 모달
    ===================================================================== */
+/* =====================================================================
+   ★ 광고 설정 ★
+   show:false 로 바꾸면 광고 자리가 모두 사라집니다.
+   광고 서비스(예: Google AdSense)에서 받은 광고 단위 코드를 home / result 에 문자열로 붙여넣으세요.
+   비어 있으면 "광고 영역" 점선 상자만 보입니다.
+   - home   : 메인 화면 맨 위 (게임 고르기 전)
+   - result : 게임 결과 창 맨 위 (기록 등록·공유 버튼과 떨어진 곳)
+   게임 중 화면과 숫자패드·판 근처에는 실수 클릭 방지를 위해 광고를 두지 않습니다.
+   ===================================================================== */
+const ADS={
+  show:true,
+  home:'',
+  result:''
+};
+function renderAd(slot,key){
+  if(!slot) return;
+  slot.classList.toggle('off',!ADS.show);
+  if(!ADS.show) return;
+  const code=(ADS[key]||'').trim();
+  slot.innerHTML='';
+  if(!code){ slot.classList.remove('filled'); slot.append(el('span','','광고 영역')); return; }
+  slot.classList.add('filled'); slot.innerHTML=code;
+  // innerHTML로 넣은 <script>는 실행되지 않으므로 다시 만들어 실행한다
+  slot.querySelectorAll('script').forEach(old=>{ const s=document.createElement('script'); [...old.attributes].forEach(a=>s.setAttribute(a.name,a.value)); s.textContent=old.textContent; old.replaceWith(s); });
+  if(slot.querySelector('ins.adsbygoogle')){ try{ (window.adsbygoogle=window.adsbygoogle||[]).push({}); }catch(e){} }
+}
+
 const GAME_IDS=['baseball','minesweeper','sichuan'];
 function showScreen(id){
   document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('active',s.id===id));
@@ -1026,6 +1063,7 @@ function showResult(win,score,rows){
   if(Host.id===null) return; // 이미 메뉴로 나감
   const box=$('#mbox'); box.innerHTML='';
   const gameId=Host.id, diff=Host.game.hasDiff?Host.diff:'-', timeSec=Math.round(Host.elapsed*10)/10;
+  const ad=el('div','ad-slot'); ad.setAttribute('role','complementary'); ad.setAttribute('aria-label','광고'); box.append(ad); renderAd(ad,'result');
   box.append(el('h2',win?'neon-y':'neon-m',win?'STAGE CLEAR!':'GAME OVER'));
   if(win){ box.append(el('div','big neon-c',score.toLocaleString())); }
   if(rows.length){ const dl=el('dl'); rows.forEach(([k,v])=>dl.append(el('dt','',k),el('dd','',v))); box.append(dl); }
@@ -1119,7 +1157,7 @@ $('#muteBtn').addEventListener('click',()=>{
 });
 
 /* ---------- boot ---------- */
-buildHome(); paintMute(); setBadge();
+buildHome(); paintMute(); setBadge(); renderAd($('#adHome'),'home');
 GAME_IDS.forEach(id=>renderBoard(id,LB.localTop(id).slice(0,5)));
 LB.init().then(()=>{ setBadge(); refreshBoards(); });
 </script>
