@@ -112,6 +112,15 @@ button{font-family:inherit;color:inherit;cursor:pointer}
 .hud b{font-family:var(--px);font-size:clamp(11px,3vw,16px);color:var(--grn);text-shadow:0 0 8px rgba(57,255,20,.6);font-weight:400}
 #stage{position:relative;background:#050214;border:3px solid var(--line);border-radius:8px;padding:14px 8px;min-height:240px;
   box-shadow:inset 0 0 40px rgba(0,240,255,.08)}
+/* 일시정지 화면: 판을 완전히 가린다 */
+.pause-ov{position:absolute;inset:0;z-index:30;background:rgba(5,2,20,.97);border-radius:6px;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:12px;text-align:center;padding:16px}
+.pause-ov .pz-t{font-family:var(--px);font-size:clamp(20px,5vw,32px)}
+.pause-ov .pz-s{margin:0;color:var(--dim);font-size:14px}
+.pause-ov .pz-b{min-width:200px;min-height:52px;font-size:13px}
+#pauseBtn{min-width:46px}
+#pauseBtn:disabled{opacity:.35;cursor:default}
+.mbox .share{display:block;width:100%;margin-top:10px}
 .toast{position:absolute;left:50%;top:10px;transform:translateX(-50%);z-index:5;font-family:var(--px);font-size:10px;
   background:#000;border:2px solid var(--yel);color:var(--yel);padding:8px 10px;white-space:nowrap;animation:pop .15s}
 .tools{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:12px}
@@ -285,6 +294,7 @@ button{font-family:inherit;color:inherit;cursor:pointer}
   <div class="ghead">
     <button class="btn mag" id="backBtn">◀ MENU</button>
     <h2 id="gTitle" class="neon-c"></h2>
+    <button class="btn" id="pauseBtn" aria-label="일시정지" disabled>II</button>
     <button class="btn yel" id="retryBtn">RETRY</button>
   </div>
   <details class="help" id="gHelpBox"><summary>❓ 게임 방법</summary><p id="gHelp"></p></details>
@@ -423,7 +433,7 @@ function setBadge(){
    ===================================================================== */
 const GAMES={};
 const Host={
-  id:null, game:null, diff:'easy', started:false, over:false, t0:0, elapsed:0, iv:null,
+  id:null, game:null, diff:'easy', started:false, over:false, t0:0, elapsed:0, iv:null, paused:false, pauseAt:0,
   open(id){
     this.id=id; this.game=GAMES[id];
     $('#gTitle').textContent=this.game.name;
@@ -434,7 +444,7 @@ const Host={
   },
   restart(){
     clearInterval(this.iv); this.iv=null;
-    this.started=false; this.over=false; this.elapsed=0;
+    this.started=false; this.over=false; this.elapsed=0; this.paused=false; this.paintPauseBtn();
     document.querySelectorAll('#diffs .btn').forEach(b=>b.classList.toggle('on',b.dataset.diff===this.diff));
     const st=$('#stage'); st.innerHTML='';
     this.game.start(st,this.diff);
@@ -443,9 +453,32 @@ const Host={
   begin(){
     if(this.started||this.over) return;
     this.started=true; this.t0=performance.now();
-    this.iv=setInterval(()=>{ if(this.game.tick) this.game.tick(); if(!this.over) this.renderHud(); },100);
+    this.iv=setInterval(()=>{ if(this.paused) return; if(this.game.tick) this.game.tick(); if(!this.over) this.renderHud(); },100);
+    this.paintPauseBtn();
   },
-  seconds(){ return this.over?this.elapsed:(this.started?(performance.now()-this.t0)/1000:0); },
+  seconds(){
+    if(this.over) return this.elapsed;
+    if(!this.started) return 0;
+    return ((this.paused?this.pauseAt:performance.now())-this.t0)/1000;
+  },
+  /* 일시정지: 시간을 멈추고 판을 가린다(멈춘 채 판을 보며 생각하는 것 방지). auto=화면을 벗어나서 멈춘 경우 */
+  pause(auto){
+    if(!this.started||this.over||this.paused||!$('#game').classList.contains('active')) return;
+    this.paused=true; this.pauseAt=performance.now(); this.renderHud(); this.paintPauseBtn();
+    const ov=el('div','pause-ov'); ov.id='pauseOv';
+    ov.append(el('div','neon-y blink pz-t','PAUSED'),
+      el('p','pz-s',auto?'화면을 벗어나서 잠깐 멈췄어요.':'잠깐 멈췄어요.'),
+      el('p','pz-s','TIME '+fmtTime(this.seconds())));
+    const go=el('button','btn yel pz-b','▶ CONTINUE'); go.addEventListener('click',()=>{ SFX.init(); SFX.play('coin'); this.resume(); });
+    ov.append(go); $('#stage').append(ov);
+  },
+  resume(){
+    if(!this.paused) return;
+    this.t0+=performance.now()-this.pauseAt; this.paused=false;
+    const ov=$('#pauseOv'); if(ov) ov.remove();
+    this.renderHud(); this.paintPauseBtn();
+  },
+  paintPauseBtn(){ const b=$('#pauseBtn'); if(!b) return; b.disabled=!this.started||this.over; b.textContent=this.paused?'▶':'II'; b.setAttribute('aria-label',this.paused?'계속하기':'일시정지'); },
   renderHud(){
     const hud=$('#hud'); hud.innerHTML='';
     this.game.hud().forEach(([k,v])=>{ const d=el('div'); d.append(el('small','',k),el('b','',String(v))); hud.append(d); });
@@ -456,7 +489,8 @@ const Host={
   },
   finish(win,rows){
     if(this.over) return;
-    this.elapsed=this.seconds(); this.over=true;
+    this.elapsed=this.seconds(); this.over=true; this.paused=false;
+    const ov=$('#pauseOv'); if(ov) ov.remove(); this.paintPauseBtn();
     clearInterval(this.iv); this.iv=null;
     this.renderHud();
     const score=win?this.game.score():0;
@@ -464,7 +498,7 @@ const Host={
     setTimeout(()=>showResult(win,score,rows||[]),win?500:900);
   },
   leave(){
-    clearInterval(this.iv); this.iv=null; this.over=true; this.id=null;
+    clearInterval(this.iv); this.iv=null; this.over=true; this.id=null; this.paused=false;
     $('#stage').innerHTML=''; showScreen('home'); refreshBoards();
   }
 };
@@ -660,6 +694,12 @@ GAMES.baseball={
     if(window.matchMedia&&matchMedia('(prefers-reduced-motion:reduce)').matches) judge(); else setTimeout(judge,730);
   },
   score(){ return Math.max(100,Math.round(10000-Math.max(0,this.tries.length-1)*600-Host.seconds()*10)); },
+  /* 공유용: 시도마다 스트라이크 🟩, 볼 🟨, 나머지 ⬛ (정답 숫자는 드러나지 않음) */
+  shareLines(){
+    const rows=this.tries.map(t=>'🟩'.repeat(t.s)+'🟨'.repeat(t.b)+'⬛'.repeat(3-t.s-t.b));
+    const lines=[]; for(let i=0;i<rows.length;i+=4) lines.push(rows.slice(i,i+4).join(' '));
+    return ['⚾ '+this.tries.length+'번 만에 '+fmtTime(Host.elapsed)+' 클리어',...lines];
+  },
   hud(){ return [['TIME',fmtTime(Host.seconds())],['TRY',this.tries.length],['SCORE',this.score()]]; }
 };
 
@@ -775,6 +815,7 @@ GAMES.minesweeper={
     }else Host.renderHud();
   },
   score(){ return Math.round(this.k.mult*Math.max(100,5000-Host.seconds()*this.k.pen)); },
+  shareLines(){ return ['💣 '+DIFF_LABEL[Host.diff]+' · 지뢰 '+this.k.m+'개 · '+fmtTime(Host.elapsed)+' 클리어']; },
   hud(){ return [['TIME',fmtTime(Host.seconds())],['MINES',this.k.m-this.flagCount],['SCORE',this.placed?this.score():this.k.mult*5000]]; }
 };
 
@@ -943,7 +984,8 @@ GAMES.sichuan={
     const remain=Math.max(0,this.k.limit-Host.seconds());
     return Math.round(this.k.mult*Math.max(100,3000+remain*20-this.miss*50-this.hints*200-this.shuf*300));
   },
-  hud(){ return [['TIME',fmtTime(Math.ceil(Math.max(0,this.k.limit-Host.seconds())))],['MISS',this.miss],['SCORE',this.score()]]; }
+  hud(){ return [['TIME',fmtTime(Math.ceil(Math.max(0,this.k.limit-Host.seconds())))],['MISS',this.miss],['SCORE',this.score()]]; },
+  shareLines(){ return ['🀄 '+DIFF_LABEL[Host.diff]+' · '+fmtTime(Host.elapsed)+' 만에 '+(this.k.r*this.k.c)+'장 모두 제거','실수 '+this.miss+' · 힌트 '+this.hints+' · 셔플 '+this.shuf]; }
 };
 
 /* =====================================================================
@@ -1005,6 +1047,23 @@ function showResult(win,score,rows){
     reg.addEventListener('click',submit);
     inp.addEventListener('keydown',e=>{ if(e.key==='Enter'&&!reg.disabled) submit(); e.stopPropagation(); });
     box.append(inp,reg);
+    // SNS 공유: 휴대폰은 기본 공유창(카카오톡·문자 등), 지원하지 않으면 결과 문구를 복사
+    const share=el('button','btn mag kr share','📤 결과 공유하기');
+    share.addEventListener('click',async()=>{
+      SFX.play('click');
+      const url=/^https?:$/.test(location.protocol)?location.origin+location.pathname:'';
+      const text=['🕹️ PIXEL ARCADE · '+GAMES[gameId].name,...GAMES[gameId].shareLines(),'🏆 '+score.toLocaleString()+'점','너도 도전해 봐!'].join('\n');
+      if(navigator.share){
+        try{ await navigator.share(url?{title:'PIXEL ARCADE',text,url}:{title:'PIXEL ARCADE',text}); msg.textContent='공유했어요!'; return; }
+        catch(e){ if(e&&e.name==='AbortError') return; }
+      }
+      const full=url?text+'\n'+url:text;
+      let ok=false;
+      try{ await navigator.clipboard.writeText(full); ok=true; }catch(e){}
+      if(!ok){ const ta=el('textarea'); ta.value=full; ta.style.cssText='position:fixed;opacity:0'; document.body.append(ta); ta.select(); try{ ok=document.execCommand('copy'); }catch(e){} ta.remove(); }
+      msg.textContent=ok?'결과를 복사했어요. 원하는 곳에 붙여넣기 하세요!':'복사하지 못했어요. 화면을 캡처해서 공유해 주세요.';
+    });
+    box.append(share);
   }else{
     box.append(el('p','','클리어해야 기록을 등록할 수 있어요.'));
   }
@@ -1030,6 +1089,7 @@ $('#intro').addEventListener('click',startFromIntro);
 document.addEventListener('keydown',e=>{
   if($('#intro').classList.contains('active')){ if(!e.ctrlKey&&!e.metaKey&&!e.altKey) startFromIntro(); return; }
   if(!$('#modal').classList.contains('hidden')) return;
+  if(Host.paused) return;
   if(Host.id==='baseball'&&$('#game').classList.contains('active')){
     const g=GAMES.baseball;
     if(/^[0-9]$/.test(e.key)){ g.input(+e.key); e.preventDefault(); }
@@ -1038,6 +1098,10 @@ document.addEventListener('keydown',e=>{
   }
 });
 $('#backBtn').addEventListener('click',()=>{ SFX.play('click'); Host.leave(); });
+$('#pauseBtn').addEventListener('click',()=>{ SFX.play('click'); if(Host.paused) Host.resume(); else Host.pause(false); });
+/* 다른 앱으로 가거나 화면을 끄면 자동 일시정지 (지하철에서 내릴 때 시간이 흐르지 않게) */
+document.addEventListener('visibilitychange',()=>{ if(document.hidden) Host.pause(true); });
+window.addEventListener('pagehide',()=>Host.pause(true));
 $('#retryBtn').addEventListener('click',()=>{ SFX.play('click'); Host.restart(); });
 $('#diffs').addEventListener('click',e=>{
   const b=e.target.closest('[data-diff]'); if(!b) return;
