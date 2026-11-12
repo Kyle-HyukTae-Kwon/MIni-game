@@ -98,6 +98,20 @@ button{font-family:inherit;color:inherit;cursor:pointer}
 .lb li .sc{font-family:var(--px);font-size:10px;color:var(--cyan)}
 .lb li.empty{color:#4b4380}
 .foot{margin-top:26px;text-align:center;color:var(--dim);font-size:12px}
+/* 광고 자리: 광고 코드가 없을 때는 점선 상자로 자리만 표시 */
+.ad-slot{position:relative;margin:0 auto 18px;max-width:728px;min-height:90px;display:flex;align-items:center;justify-content:center;
+  border:2px dashed #3a2f6e;border-radius:6px;background:rgba(10,4,32,.55);color:#6c62a0;font-size:12px;text-align:center;overflow:hidden}
+.ad-slot::before{content:"AD";position:absolute;top:5px;left:7px;font-family:var(--px);font-size:8px;color:#6c62a0}
+.ad-slot.filled{border:0;background:none}
+.ad-slot.filled::before{display:none}
+.ad-slot.off{display:none}
+.mbox .ad-slot{min-height:60px;margin:0 0 16px}
+/* 전면 광고 (광고 서비스 연결 전 확인용) */
+.ad-inter{position:fixed;inset:0;z-index:950;background:rgba(3,1,14,.96);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:16px}
+.ad-inter .ad-inter-box{width:min(100%,336px);min-height:280px;margin:0}
+.ad-inter-close{min-width:150px;min-height:48px;font-size:12px}
+.ad-inter-close:disabled{opacity:.5;cursor:default}
+@media (max-width:560px){ .ad-slot{min-height:100px;margin-bottom:14px} .mbox .ad-slot{min-height:56px} }
 
 /* ---------- game screen ---------- */
 .ghead{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
@@ -285,6 +299,7 @@ button{font-family:inherit;color:inherit;cursor:pointer}
       <button class="btn" id="muteBtn" aria-label="소리 켜기/끄기">SOUND ON</button>
     </div>
   </div>
+  <div class="ad-slot" id="adHome" role="complementary" aria-label="광고"></div>
   <div class="cabs" id="cabs"></div>
   <p class="foot">빠르고 정확하게 클리어할수록 높은 점수! 클리어하면 닉네임으로 기록을 등록할 수 있어요.</p>
 </section>
@@ -991,6 +1006,69 @@ GAMES.sichuan={
 /* =====================================================================
    UI : 화면 전환, 메인 랭킹, 결과 모달
    ===================================================================== */
+/* =====================================================================
+   ★ 광고 설정 ★
+   show:false 로 바꾸면 광고 자리가 모두 사라집니다.
+   광고 서비스(예: Google AdSense)에서 받은 광고 단위 코드를 home / result 에 문자열로 붙여넣으세요.
+   비어 있으면 "광고 영역" 점선 상자만 보입니다.
+   - home   : 메인 화면 맨 위 (게임 고르기 전)
+   - result : 게임 결과 창 맨 위 배너 (resultBanner:true 일 때만. 전면 광고와 겹치지 않게 기본은 꺼 둠)
+   게임 중 화면과 숫자패드·판 근처에는 실수 클릭 방지를 위해 광고를 두지 않습니다.
+
+   전면 광고(interstitial): 결과 창에서 RETRY/MENU를 누를 때, 아래 두 조건을 모두 만족하면 한 번 띄웁니다.
+   - everyGames : 지난 전면 광고 뒤로 이만큼 판을 끝냈을 때 (기본 3판)
+   - minGapSec  : 지난 전면 광고(또는 사이트 접속) 뒤로 이만큼 시간이 지났을 때 (기본 180초)
+   실제 광고: 구글 H5 게임 광고(Ad Placement API) 승인 후 안내받은 설정 코드를 <head>에 넣으면
+   window.adBreak 가 생기고, 자동으로 그 광고를 띄웁니다.
+   그 전까지는 placeholder:true 면 "전면 광고 영역" 화면을 잠깐 보여 주고, false면 아무것도 띄우지 않습니다.
+   ===================================================================== */
+const ADS={
+  show:true,
+  home:'',
+  result:'',
+  resultBanner:false,
+  interstitial:{ show:true, everyGames:3, minGapSec:180, placeholder:true }
+};
+/* 전면 광고 관리: 판 수와 시간을 세다가 다음 판으로 넘어가는 순간에만 띄운다 */
+const AdBreak={
+  games:0, lastAt:Date.now(),
+  noteGame(){ this.games++; },
+  due(){ const c=ADS.interstitial; return !!(ADS.show&&c&&c.show&&this.games>=c.everyGames&&(Date.now()-this.lastAt)/1000>=c.minGapSec); },
+  run(next){
+    if(!this.due()){ next(); return; }
+    this.games=0; this.lastAt=Date.now();
+    const wasMuted=SFX.muted; SFX.muted=true;   // 광고 소리와 겹치지 않게 효과음을 잠깐 끈다
+    let finished=false; const done=()=>{ if(finished) return; finished=true; SFX.muted=wasMuted; next(); };
+    if(typeof window.adBreak==='function'){
+      try{ window.adBreak({type:'next',name:'game-end',adBreakDone:done}); }catch(e){ done(); }
+      return;
+    }
+    if(ADS.interstitial.placeholder) this.placeholder(done); else done();
+  },
+  /* 광고 서비스를 연결하기 전 확인용 화면: 3초 뒤 닫기 버튼이 켜진다 */
+  placeholder(done){
+    const ov=el('div','ad-inter'); ov.setAttribute('role','dialog'); ov.setAttribute('aria-label','광고');
+    const box=el('div','ad-slot ad-inter-box'); box.append(el('span','','전면 광고 영역'));
+    const close=el('button','btn ad-inter-close','3'); close.disabled=true;
+    ov.append(box,close); document.body.append(ov);
+    let n=3; const iv=setInterval(()=>{ n--; if(n>0){ close.textContent=String(n); return; }
+      clearInterval(iv); close.disabled=false; close.textContent='닫기 ✕'; close.focus(); },1000);
+    close.addEventListener('click',()=>{ if(close.disabled) return; ov.remove(); done(); });
+  }
+};
+function renderAd(slot,key){
+  if(!slot) return;
+  slot.classList.toggle('off',!ADS.show);
+  if(!ADS.show) return;
+  const code=(ADS[key]||'').trim();
+  slot.innerHTML='';
+  if(!code){ slot.classList.remove('filled'); slot.append(el('span','','광고 영역')); return; }
+  slot.classList.add('filled'); slot.innerHTML=code;
+  // innerHTML로 넣은 <script>는 실행되지 않으므로 다시 만들어 실행한다
+  slot.querySelectorAll('script').forEach(old=>{ const s=document.createElement('script'); [...old.attributes].forEach(a=>s.setAttribute(a.name,a.value)); s.textContent=old.textContent; old.replaceWith(s); });
+  if(slot.querySelector('ins.adsbygoogle')){ try{ (window.adsbygoogle=window.adsbygoogle||[]).push({}); }catch(e){} }
+}
+
 const GAME_IDS=['baseball','minesweeper','sichuan'];
 function showScreen(id){
   document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('active',s.id===id));
@@ -1026,6 +1104,8 @@ function showResult(win,score,rows){
   if(Host.id===null) return; // 이미 메뉴로 나감
   const box=$('#mbox'); box.innerHTML='';
   const gameId=Host.id, diff=Host.game.hasDiff?Host.diff:'-', timeSec=Math.round(Host.elapsed*10)/10;
+  AdBreak.noteGame();
+  if(ADS.resultBanner){ const ad=el('div','ad-slot'); ad.setAttribute('role','complementary'); ad.setAttribute('aria-label','광고'); box.append(ad); renderAd(ad,'result'); }
   box.append(el('h2',win?'neon-y':'neon-m',win?'STAGE CLEAR!':'GAME OVER'));
   if(win){ box.append(el('div','big neon-c',score.toLocaleString())); }
   if(rows.length){ const dl=el('dl'); rows.forEach(([k,v])=>dl.append(el('dt','',k),el('dd','',v))); box.append(dl); }
@@ -1070,8 +1150,9 @@ function showResult(win,score,rows){
   box.append(msg);
   const row=el('div','row');
   const again=el('button','btn','RETRY'), menu=el('button','btn mag','MENU');
-  again.addEventListener('click',()=>{ closeModal(); Host.restart(); });
-  menu.addEventListener('click',()=>{ closeModal(); Host.leave(); });
+  // 다음 판으로 넘어가는 순간: 조건이 맞으면 전면 광고를 먼저 보여 준다
+  again.addEventListener('click',()=>{ closeModal(); AdBreak.run(()=>Host.restart()); });
+  menu.addEventListener('click',()=>{ closeModal(); AdBreak.run(()=>Host.leave()); });
   row.append(again,menu); box.append(row);
   $('#modal').classList.remove('hidden');
   (inp||again).focus();
@@ -1119,7 +1200,7 @@ $('#muteBtn').addEventListener('click',()=>{
 });
 
 /* ---------- boot ---------- */
-buildHome(); paintMute(); setBadge();
+buildHome(); paintMute(); setBadge(); renderAd($('#adHome'),'home');
 GAME_IDS.forEach(id=>renderBoard(id,LB.localTop(id).slice(0,5)));
 LB.init().then(()=>{ setBadge(); refreshBoards(); });
 </script>
